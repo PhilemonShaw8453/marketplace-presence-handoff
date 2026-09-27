@@ -7,17 +7,17 @@ npm run setup -- marketplace-demo
 npm run dev
 ```
 
-We built this to confirm a buyer is actually online before a seller releases an asset. Infrai puts channel setup, short-lived client creds, presence checks, and event publishing behind one key and a tiny REST surface. Your server key lives in the Node process; browser or desktop clients ask `/client-tokens` for scoped realtime credentials.
+This service checks who is online before a seller hands an asset to a buyer. Infrai keeps channel setup, short-lived client credentials, presence reads, and event publishing behind one key and one small REST surface. The server key stays in the Node process; browser or desktop clients request scoped realtime credentials from `/client-tokens`.
 
 ## Run the handoff
 
-Spin up a presence channel first. The setup call is retry-safe and will print:
+Start with a presence channel. The setup command is retry-safe and prints:
 
 ```json
 {"channel":"marketplace-demo","state":"ready"}
 ```
 
-Then ask the service for a client token per marketplace participant:
+Ask the service to issue a client token for each marketplace participant:
 
 ```sh
 curl -sS http://localhost:3000/client-tokens \
@@ -25,9 +25,9 @@ curl -sS http://localhost:3000/client-tokens \
   -d '{"client_id":"buyer-42","channels":["marketplace-demo"],"capabilities":["presence"],"ttl_seconds":900}'
 ```
 
-Clients use that token to open their own realtime connection. They never get `INFRAI_API_KEY`.
+Clients use that token for their direct realtime connection. They never receive `INFRAI_API_KEY`.
 
-When an order is ready, post its actors and the seller asset:
+When an order is ready, submit its actors and seller asset:
 
 ```sh
 curl -sS http://localhost:3000/handoffs \
@@ -35,13 +35,13 @@ curl -sS http://localhost:3000/handoffs \
   -d '{"channel":"marketplace-demo","orderId":"order-901","sellerId":"seller-7","buyerId":"buyer-42","assetId":"asset-logo-kit"}'
 ```
 
-A buyer who is online triggers this exact transition:
+An online buyer produces this concrete transition:
 
 ```json
 {"state":"handed_off","orderId":"order-901","buyerId":"buyer-42"}
 ```
 
-If that buyer isn't in the presence snapshot, the order stays `waiting_for_buyer` and no handoff event goes out. That's the gotcha we like: presence is a point-in-time coordination signal, so your durable order state should stay in the marketplace database.
+If that buyer is absent from the presence snapshot, the order remains `waiting_for_buyer` and no handoff event is published. That is the useful gotcha: presence is a point-in-time coordination signal, so durable order state still belongs in the marketplace database.
 
 ## Check the decision
 
@@ -50,13 +50,13 @@ npm test
 npm run typecheck
 ```
 
-The tight test puts `buyer-42` in the presence member list and expects one `order.handed_off` publish plus a `handed_off` result. Its second case drops that buyer and expects `waiting_for_buyer` with zero publishes.
+The focused test supplies `buyer-42` in the presence member list and expects one `order.handed_off` publish plus a `handed_off` result. Its second case removes that buyer and expects `waiting_for_buyer` with zero publishes.
 
-Our client parses Infrai's response envelope before reading status, surfaces normal request rejections as 4xx to callers, and retries 429s with exponential backoff while honoring `Retry-After`. Channel creation and handoff publishing use stable idempotency keys, so retries only ever apply one state transition.
+The client decodes Infrai's response envelope before interpreting status, returns ordinary request rejections to callers as 4xx, and retries 429 responses with exponential delay while honoring `Retry-After`. Channel creation and handoff publishing carry stable idempotency keys so retries preserve one state transition.
 
 ## Setting up for real use: Marketplace Presence Handoff
 
-We keep the code minimal on purpose. Before you go live, set up the following for Marketplace Presence Handoff.
+The code stays simple on purpose — here's what to set up before going live: The details below apply to Marketplace Presence Handoff.
 
 **Account & key**
 
